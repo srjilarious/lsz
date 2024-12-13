@@ -1,9 +1,12 @@
 const std = @import("std");
+const zargs = @import("zargunaught");
 
-fn cStrToSlice(c_str: [*:0]const u8) []const u8 {
-    const length = std.mem.len(c_str);
-    return c_str[0..length];
-}
+const Option = zargs.Option;
+
+// fn cStrToSlice(c_str: [*:0]const u8) []const u8 {
+//     const length = std.mem.len(c_str);
+//     return c_str[0..length];
+// }
 
 const ExtensionStyle = struct { ext: []const u8, icon: []const u8 };
 
@@ -41,10 +44,10 @@ const DirExtensionList = [_]ExtensionStyle{
 
 const DefaultStyle = style("", "\u{f15b}");
 
-const ListOptions = struct {
-    showHidden: bool = false,
-    longList: bool = false,
-};
+// const ListOptions = struct {
+//     showHidden: bool = false,
+//     longList: bool = false,
+// };
 
 const FileMode = packed struct(u16) {
     all_x: bool,
@@ -63,58 +66,100 @@ const FileMode = packed struct(u16) {
 };
 
 pub fn main() !void {
-    var options = ListOptions{};
-    var dirToLookUp: []const u8 = ".";
+    // var options = ListOptions{};
+    // var dirToLookUp: []const u8 = ".";
+    //
+    // if (std.os.argv.len > 1) {
+    //     var idx: usize = 1;
+    //     while (std.os.argv[idx][0] == '-') {
+    //         const arg = cStrToSlice(std.os.argv[idx]);
+    //         idx += 1;
+    //         if (arg.len == 1) break;
+    //
+    //         // Check for long options
+    //         if (arg[1] == '-') {
+    //             if (std.ascii.eqlIgnoreCase(arg[2..], "hidden")) {
+    //                 options.showHidden = true;
+    //             } else if (std.ascii.eqlIgnoreCase(arg[2..], "long")) {
+    //                 options.longList = true;
+    //             }
+    //         } else {
+    //             var sIdx: usize = 1;
+    //             while (sIdx < arg.len) {
+    //                 switch (arg[sIdx]) {
+    //                     'a' => options.showHidden = true,
+    //                     'l' => options.longList = true,
+    //                     else => {},
+    //                 }
+    //                 sIdx += 1;
+    //             }
+    //         }
+    //     }
+    //
+    //     if (idx < std.os.argv.len) {
+    //         dirToLookUp = cStrToSlice(std.os.argv[idx]);
+    //     }
+    // }
 
-    if (std.os.argv.len > 1) {
-        var idx: usize = 1;
-        while (std.os.argv[idx][0] == '-') {
-            const arg = cStrToSlice(std.os.argv[idx]);
-            idx += 1;
-            if (arg.len == 1) break;
-
-            // Check for long options
-            if (arg[1] == '-') {
-                if (std.ascii.eqlIgnoreCase(arg[2..], "hidden")) {
-                    options.showHidden = true;
-                } else if (std.ascii.eqlIgnoreCase(arg[2..], "long")) {
-                    options.longList = true;
-                }
-            } else {
-                var sIdx: usize = 1;
-                while (sIdx < arg.len) {
-                    switch (arg[sIdx]) {
-                        'a' => options.showHidden = true,
-                        'l' => options.longList = true,
-                        else => {},
-                    }
-                    sIdx += 1;
-                }
-            }
-        }
-
-        if (idx < std.os.argv.len) {
-            dirToLookUp = cStrToSlice(std.os.argv[idx]);
-        }
-    }
-
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    // const stdout_file = std.io.getStdOut().writer();
+    // var bw = std.io.bufferedWriter(stdout_file);
+    // const stdout = bw.writer();
 
     //const sub_path = cStrToSlice(std.os.argv[1]);
+
+    var parser = try zargs.ArgParser.init(std.heap.page_allocator, .{
+        .name = "lsz",
+        .description = "Lists the contents of directories.",
+        .opts = &.{
+            .{ .longName = "hidden", .shortName = "a", .description = "Shows hidden files and directories", .maxNumParams = 0 },
+            .{ .longName = "long", .shortName = "l", .description = "Shows a long form list of the directory.", .maxNumParams = 0 },
+            .{ .longName = "help", .description = "Prints out help for the program." },
+        },
+    });
+    defer parser.deinit();
+
+    var args = parser.parse() catch |err| {
+        std.debug.print("Error parsing args: {any}\n", .{err});
+        return;
+    };
+    defer args.deinit();
+
+    var stdout = try zargs.print.Printer.stdout(std.heap.page_allocator);
+    defer stdout.deinit();
+
+    if (args.hasOption("help")) {
+        var help = try zargs.help.HelpFormatter.init(&parser, stdout, zargs.help.DefaultTheme, std.heap.page_allocator);
+        defer help.deinit();
+
+        help.printHelpText() catch |err| {
+            std.debug.print("Err: {any}\n", .{err});
+        };
+        try stdout.flush();
+        return;
+    }
+
+    const dirToLookUp = blk: {
+        if (args.positional.items.len > 0) {
+            break :blk args.positional.items[0];
+        } else {
+            break :blk ".";
+        }
+    };
     const dir = std.fs.cwd().openDir(dirToLookUp, .{ .access_sub_paths = false, .iterate = true }) catch {
         try stdout.print("Unable to open directory: {s}\n", .{dirToLookUp});
         return;
     };
 
+    const showHidden = args.hasOption("hidden");
+    const longList = args.hasOption("long");
+
     var it = dir.iterate();
     while (try it.next()) |entry| {
-        if (options.showHidden == false and std.ascii.startsWithIgnoreCase(entry.name, ".")) {
+        if (showHidden == false and std.ascii.startsWithIgnoreCase(entry.name, ".")) {
             continue;
         }
 
-        if (options.longList == true) {
+        if (longList == true) {
             const statVal = try dir.statFile(entry.name);
             const stat: FileMode = @bitCast(@as(u16, @intCast(statVal.mode)));
             switch (stat.type) {
@@ -194,7 +239,7 @@ pub fn main() !void {
                 try stdout.print("?{s}\n", .{entry.name});
             },
         }
-
-        try bw.flush();
     }
+
+    try stdout.flush();
 }
