@@ -2,6 +2,8 @@ const std = @import("std");
 const zargs = @import("zargunaught");
 
 const Option = zargs.Option;
+const Style = zargs.print.Style;
+const Color = zargs.print.Color;
 
 // fn cStrToSlice(c_str: [*:0]const u8) []const u8 {
 //     const length = std.mem.len(c_str);
@@ -10,8 +12,8 @@ const Option = zargs.Option;
 
 const ExtensionStyle = struct { ext: []const u8, icon: []const u8 };
 
-fn style(ext: []const u8, icon: []const u8) ExtensionStyle {
-    return .{ .ext = ext, .icon = icon };
+fn icon(ext: []const u8, ico: []const u8) ExtensionStyle {
+    return .{ .ext = ext, .icon = ico };
 }
 // fn fileStye(name: []const u8) ExtensionStyle {
 //     switch(name) {
@@ -20,29 +22,34 @@ fn style(ext: []const u8, icon: []const u8) ExtensionStyle {
 // }
 
 const ExtensionList = [_]ExtensionStyle{
-    style(".py", "\u{e73c}"),
-    style(".ex", "\u{e62d}"),
-    style(".exs", "\u{e62d}"),
-    style(".c", "\u{e61e}"),
-    style(".h", "\u{e61e}"),
-    style(".cpp", "\u{e61d}"),
-    style(".hpp", "\u{e61d}"),
-    style(".lua", "\u{e620}"),
-    style(".zig", "\u{e6a9}"),
-    style(".rs", "\u{e7a8}"),
-    style(".lock", "\u{f023}"),
-    style(".toml", "\u{f0169}"),
-    style(".gitignore", "\u{f1d3}"),
-    style("Dockerfile", "\u{f0868}"),
-    style(".dockerignore", "\u{f0868}"),
+    icon(".py", "\u{e73c}"),
+    icon(".ex", "\u{e62d}"),
+    icon(".exs", "\u{e62d}"),
+    icon(".c", "\u{e61e}"),
+    icon(".h", "\u{e61e}"),
+    icon(".cpp", "\u{e61d}"),
+    icon(".hpp", "\u{e61d}"),
+    icon(".lua", "\u{e620}"),
+    icon(".zig", "\u{e6a9}"),
+    icon(".rs", "\u{e7a8}"),
+    icon(".lock", "\u{f023}"),
+    icon(".toml", "\u{f0169}"),
+    icon(".gitignore", "\u{f1d3}"),
+    icon("Dockerfile", "\u{f0868}"),
+    icon(".dockerignore", "\u{f0868}"),
 };
 
 const DirExtensionList = [_]ExtensionStyle{
-    style(".git", "\u{e5fb}"),
-    style(".vscode", "\u{f0a1e}"),
+    icon(".git", "\u{e5fb}"),
+    icon(".vscode", "\u{f0a1e}"),
 };
 
-const DefaultStyle = style("", "\u{f15b}");
+const DefaultIcon = icon("", "\u{f15b}");
+
+const DirectoryStyle = Style{ .fg = .Blue, .bg = .Reset, .mod = .{ .bold = true } };
+const ReadFlagStyle = Style{ .fg = .BrightGreen, .bg = .Reset, .mod = .{} };
+const WriteFlagStyle = Style{ .fg = .BrightYellow, .bg = .Reset, .mod = .{} };
+const ExecuteFlagStyle = Style{ .fg = .BrightRed, .bg = .Reset, .mod = .{} };
 
 // const ListOptions = struct {
 //     showHidden: bool = false,
@@ -64,6 +71,32 @@ const FileMode = packed struct(u16) {
     setuid: bool,
     type: u4,
 };
+
+fn writeFileFlags(stdout: zargs.print.Printer, r: bool, w: bool, x: bool) !void {
+    if (r) {
+        try ReadFlagStyle.set(stdout);
+        try stdout.print("r", .{});
+    } else {
+        try Style.reset(stdout);
+        try stdout.print("-", .{});
+    }
+
+    if (w) {
+        try WriteFlagStyle.set(stdout);
+        try stdout.print("w", .{});
+    } else {
+        try Style.reset(stdout);
+        try stdout.print("-", .{});
+    }
+
+    if (x) {
+        try ExecuteFlagStyle.set(stdout);
+        try stdout.print("x", .{});
+    } else {
+        try Style.reset(stdout);
+        try stdout.print("-", .{});
+    }
+}
 
 pub fn main() !void {
     // var options = ListOptions{};
@@ -165,7 +198,10 @@ pub fn main() !void {
             switch (stat.type) {
                 1 => try stdout.print("f", .{}),
                 2 => try stdout.print("c", .{}),
-                4 => try stdout.print("d", .{}),
+                4 => {
+                    try DirectoryStyle.set(stdout);
+                    try stdout.print("d", .{});
+                },
                 6 => try stdout.print("b", .{}),
                 8 => try stdout.print("-", .{}),
                 12 => try stdout.print("l", .{}),
@@ -173,37 +209,9 @@ pub fn main() !void {
                 else => try stdout.print("?", .{}),
             }
 
-            if (stat.user_r) {
-                try stdout.print("r", .{});
-            } else try stdout.print("-", .{});
-            if (stat.user_w) {
-                try stdout.print("w", .{});
-            } else try stdout.print("-", .{});
-            if (stat.user_x) {
-                try stdout.print("x", .{});
-            } else try stdout.print("-", .{});
-
-            if (stat.group_r) {
-                try stdout.print("r", .{});
-            } else try stdout.print("-", .{});
-            if (stat.group_w) {
-                try stdout.print("w", .{});
-            } else try stdout.print("-", .{});
-            if (stat.group_x) {
-                try stdout.print("x", .{});
-            } else try stdout.print("-", .{});
-
-            if (stat.all_r) {
-                try stdout.print("r", .{});
-            } else try stdout.print("-", .{});
-            if (stat.all_w) {
-                try stdout.print("w", .{});
-            } else try stdout.print("-", .{});
-            if (stat.all_x) {
-                try stdout.print("x ", .{});
-            } else try stdout.print("- ", .{});
-
-            // try stdout.print("{o} ", .{stat.mode});
+            try writeFileFlags(stdout, stat.user_r, stat.user_w, stat.user_x);
+            try writeFileFlags(stdout, stat.group_r, stat.group_w, stat.group_x);
+            try writeFileFlags(stdout, stat.all_r, stat.all_w, stat.all_x);
         }
 
         switch (entry.kind) {
@@ -216,13 +224,15 @@ pub fn main() !void {
                     }
                 }
                 if (found == false) {
-                    try stdout.print("{s} ", .{DefaultStyle.icon});
+                    try stdout.print("{s} ", .{DefaultIcon.icon});
                 }
 
                 try stdout.print("{s}\n", .{entry.name});
             },
             .directory => {
-                try stdout.print("\x1b[1;34m", .{});
+                // try stdout.print("\x1b[1;34m", .{});
+                try DirectoryStyle.set(stdout);
+
                 var found = false;
                 inline for (DirExtensionList) |st| {
                     if (std.ascii.eqlIgnoreCase(entry.name, st.ext)) {
@@ -233,7 +243,9 @@ pub fn main() !void {
                 if (found == false) {
                     try stdout.print("\u{e5ff} ", .{});
                 }
-                try stdout.print("{s}/\x1b[0m\n", .{entry.name});
+                try stdout.print("{s}/", .{entry.name});
+                try Style.reset(stdout);
+                try stdout.print("\n", .{});
             },
             else => {
                 try stdout.print("?{s}\n", .{entry.name});
