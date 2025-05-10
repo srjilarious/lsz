@@ -51,6 +51,11 @@ const ReadFlagStyle = Style{ .fg = .BrightGreen, .bg = .Reset, .mod = .{} };
 const WriteFlagStyle = Style{ .fg = .BrightYellow, .bg = .Reset, .mod = .{} };
 const ExecuteFlagStyle = Style{ .fg = .BrightRed, .bg = .Reset, .mod = .{} };
 
+const KBytes = 1024;
+const MBytes = 1024 * KBytes;
+const GBytes = 1024 * MBytes;
+const TBytes = 1024 * GBytes;
+
 // const ListOptions = struct {
 //     showHidden: bool = false,
 //     longList: bool = false,
@@ -212,6 +217,20 @@ pub fn main() !void {
             try writeFileFlags(stdout, stat.user_r, stat.user_w, stat.user_x);
             try writeFileFlags(stdout, stat.group_r, stat.group_w, stat.group_x);
             try writeFileFlags(stdout, stat.all_r, stat.all_w, stat.all_x);
+
+            try Style.reset(stdout);
+
+            if (statVal.size < KBytes) {
+                try stdout.print(" {} B ", .{statVal.size});
+            } else if (statVal.size < MBytes) {
+                try stdout.print(" {} KB ", .{statVal.size / KBytes});
+            } else if (statVal.size < GBytes) {
+                try stdout.print(" {} MB ", .{statVal.size / MBytes});
+            } else if (statVal.size < TBytes) {
+                try stdout.print(" {} GB ", .{statVal.size / GBytes});
+            } else {
+                try stdout.print(" {} TB ", .{statVal.size / TBytes});
+            }
         }
 
         switch (entry.kind) {
